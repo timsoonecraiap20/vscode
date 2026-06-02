@@ -8,7 +8,7 @@ import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Application, ApplicationOptions, Logger } from '../../../../automation';
-import { createApp, getCopilotSmokeTestEnv, getMockLlmServerPath, installAppAfterHandler, installDiagnosticsHandler, installAllHandlers, MockLlmServer, suiteCrashPath, suiteLogsPath } from '../../utils';
+import { createApp, getCopilotSmokeTestEnv, getMockLlmServerPath, installAppAfterHandler, installDiagnosticsHandler, installAllHandlers, MockLlmServer, retry, suiteCrashPath, suiteLogsPath } from '../../utils';
 
 /**
  * Per-test scenarios. Each test uses a unique scenario id so that the mock
@@ -242,19 +242,34 @@ export function setup(logger: Logger) {
 		it('Test Copilot CLI session via AgentHost', async function () {
 			const app = this.app as Application;
 
-			await app.workbench.agentsWindow.waitForNewSessionView();
-			await app.workbench.agentsWindow.selectSessionType('Local Agent Host');
+			const text = await retry(async () => {
+				const requestsBefore = mockServer.requestCount();
+				await app.workbench.agentsWindow.waitForNewSessionView();
+				await app.workbench.agentsWindow.selectSessionType('Local Agent Host');
+				await app.workbench.agentsWindow.submitNewSessionPrompt(`hello world [scenario:${AGENT_HOST_SCENARIO_ID}]`);
 
-			const requestsBefore = mockServer.requestCount();
-			await app.workbench.agentsWindow.submitNewSessionPrompt(`hello world [scenario:${AGENT_HOST_SCENARIO_ID}]`);
-
-			const text = await app.workbench.agentsWindow.waitForAssistantText(AGENT_HOST_REPLY);
+				const reply = await Promise.race([
+					app.workbench.agentsWindow.waitForAssistantText(AGENT_HOST_REPLY),
+					(async () => {
+						// Poll for the new-session view returning. `submitNewSessionPrompt`
+						// already confirmed it disappeared, so any later sighting means the
+						// chat reset out from under us.
+						while (true) {
+							await new Promise(r => setTimeout(r, 500));
+							const newSession = await app.code.getElements('.sessions-chat-widget .new-chat-widget-container', /* recursive */ false);
+							if (newSession && newSession.length > 0) {
+								throw new Error('chat reset to new-session view before the reply arrived — likely an AgentHostContribution registration race (see _handleRootStateChange disposing the chat session contribution on a transient empty agents push)');
+							}
+						}
+					})(),
+				]);
+				assert.ok(
+					mockServer.requestCount() > requestsBefore,
+					'expected the mock LLM server to have received a new request from the AgentHost session'
+				);
+				return reply;
+			}, /* delay */ 1_000, /* retries */ 2);
 			logger.log(`Agents Window (AgentHost) response: ${text}`);
-
-			assert.ok(
-				mockServer.requestCount() > requestsBefore,
-				'expected the mock LLM server to have received a new request from the AgentHost session'
-			);
 
 			// Confirm the request actually flowed through the AgentHost.
 			const ahpLogDir = path.join(logsPath, 'ahp');
