@@ -258,12 +258,21 @@ export function setup(logger: Logger) {
 
 			// Confirm the request actually flowed through the AgentHost.
 			const ahpLogDir = path.join(logsPath, 'ahp');
-			const ahpEntries = fs.existsSync(ahpLogDir)
-				? fs.readdirSync(ahpLogDir).filter(f => f.endsWith('.jsonl'))
-				: [];
-			const ahpFrames = ahpEntries
-				.map(f => fs.readFileSync(path.join(ahpLogDir, f), 'utf8'))
-				.join('\n');
+			const ahpDeadline = Date.now() + 10_000;
+			let ahpEntries: string[] = [];
+			let ahpFrames = '';
+			while (Date.now() < ahpDeadline) {
+				ahpEntries = fs.existsSync(ahpLogDir)
+					? fs.readdirSync(ahpLogDir).filter(f => f.endsWith('.jsonl'))
+					: [];
+				ahpFrames = ahpEntries
+					.map(f => fs.readFileSync(path.join(ahpLogDir, f), 'utf8'))
+					.join('\n');
+				if (ahpFrames.includes('"type":"session/turnStarted"')) {
+					break;
+				}
+				await new Promise(r => setTimeout(r, 250));
+			}
 			assert.ok(
 				ahpFrames.includes('"type":"session/turnStarted"'),
 				`expected the AgentHost process to have received a session/turnStarted dispatchAction (checked ${ahpEntries.length} jsonl files under ${ahpLogDir}); if missing, the renderer-side extension likely served the reply instead`
