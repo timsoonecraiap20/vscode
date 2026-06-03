@@ -2065,11 +2065,13 @@ async function toDiscoveredChildCustomization(file: URI, type: DiscoveredType, f
 	const id = customizationId(uri);
 	if (type === DiscoveredType.Agent) {
 		const agentInfo = await parseAgentFile(file, fileService);
+		const _meta = agentInfo.content ? { content: agentInfo.content } : undefined;
 		return {
 			type: CustomizationType.Agent,
 			id,
 			uri,
 			name: agentInfo.name,
+			_meta
 		};
 	}
 	if (type === DiscoveredType.Skill) {

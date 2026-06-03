@@ -1515,6 +1515,12 @@ export interface AgentCustomization extends CustomizationBase {
 	 * invoke it. Sourced from the agent file's frontmatter `description`.
 	 */
 	description?: string;
+	/**
+	 * Additional provider-specific metadata for this custom agent.
+	 *
+	 * Mirrors the MCP `_meta` convention.
+	 */
+	_meta?: Record<string, unknown>;
 }
 
 /**

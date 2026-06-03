@@ -1797,6 +1797,7 @@ export interface IChatSessionCustomizationItemDto {
 	readonly pluginUri?: UriComponents;
 	readonly badgeTooltip?: string;
 	readonly userInvocable?: boolean;
+	readonly _meta?: Record<string, unknown>;
 }
 export interface IChatParticipantMetadata {
 	participant: string;

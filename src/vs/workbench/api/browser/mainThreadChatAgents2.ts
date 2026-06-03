@@ -779,6 +779,7 @@ export class MainThreadChatAgents2 extends Disposable implements MainThreadChatA
 					extensionId: item.extensionId,
 					pluginUri: item.pluginUri ? URI.revive(item.pluginUri) : undefined,
 					userInvocable: item.userInvocable,
+					_meta: item._meta,
 				}));
 			},
 		};

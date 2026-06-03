@@ -10,7 +10,7 @@ import { mock } from '../../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
 import { type IAgentConnection } from '../../../../../../platform/agentHost/common/agentService.js';
 import { ActionType, isSessionAction, type ActionEnvelope, type INotification, type StateAction } from '../../../../../../platform/agentHost/common/state/sessionActions.js';
-import { CustomizationLoadStatus, CustomizationType, type AgentInfo, type Customization, type RootState, type SessionState } from '../../../../../../platform/agentHost/common/state/protocol/state.js';
+import { CustomizationLoadStatus, CustomizationType, type AgentCustomization, type AgentInfo, type Customization, type RootState, type SessionState } from '../../../../../../platform/agentHost/common/state/protocol/state.js';
 import { StateComponents, type ComponentToState } from '../../../../../../platform/agentHost/common/state/sessionState.js';
 import { sessionReducer } from '../../../../../../platform/agentHost/common/state/sessionReducers.js';
 import { type IAgentSubscription } from '../../../../../../platform/agentHost/common/state/agentSubscription.js';
@@ -223,6 +223,53 @@ suite('RemoteAgentHostCustomizationHarness', () => {
 		const items = await provider.provideChatSessionCustomizations(testSessionResource, CancellationToken.None);
 		assert.strictEqual(items.length, 2);
 		assert.notStrictEqual(items[0].itemKey, items[1].itemKey);
+	});
+
+	test('provider forwards metadata for custom agent refs', async () => {
+		const agent = {
+			type: CustomizationType.Agent,
+			id: 'agent-1',
+			uri: 'file:///agents/meta.agent.md',
+			name: 'Meta Agent',
+			description: 'Agent with metadata',
+			_meta: {
+				content: '---\nname: Meta Agent\n---\nUse metadata content.\n',
+			},
+		} satisfies AgentCustomization;
+
+		const fileService = new class extends mock<IFileService>() {
+			override async canHandleResource() { return false; }
+			override async resolveAll() { return []; }
+		};
+		const customizationsService: IAgentHostCustomizationService = {
+			_serviceBrand: undefined,
+			onDidChangeCustomAgents: Event.None,
+			onDidChangeCustomizations: Event.None,
+			getCustomAgents: () => [agent],
+			getCustomizations: () => [],
+			getWorkingDirectory: () => undefined,
+		};
+		const provider = disposables.add(new AgentCustomizationItemProvider(
+			'test-authority',
+			() => { },
+			fileService,
+			new NullLogService(),
+			customizationsService,
+		));
+
+		const agents = await provider.provideCustomAgents(testSessionResource);
+
+		assert.deepStrictEqual(agents.map(agent => ({
+			name: agent.name,
+			description: agent.description,
+			_meta: agent._meta,
+		})), [{
+			name: 'Meta Agent',
+			description: 'Agent with metadata',
+			_meta: {
+				content: '---\nname: Meta Agent\n---\nUse metadata content.\n',
+			},
+		}]);
 	});
 
 	test('provider keeps client-synced entries distinct from host-owned entries', async () => {

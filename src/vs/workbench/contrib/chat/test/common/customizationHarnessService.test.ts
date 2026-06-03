@@ -15,6 +15,7 @@ import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { SessionType } from '../../common/chatSessionsService.js';
 import { MockPromptsService } from './promptSyntax/service/mockPromptsService.js';
 import { AICustomizationSources } from '../../common/aiCustomizationWorkspaceService.js';
+import { PromptFileParser } from '../../common/promptSyntax/promptFileParser.js';
 
 suite('CustomizationHarnessService', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -495,6 +496,165 @@ suite('CustomizationHarnessService', () => {
 				const agents = (await service.getCustomAgents(testSessionResource2, CancellationToken.None));
 				assert.deepStrictEqual(agents.map(agent => [agent.name, agent.enabled]), [['selected', true], ['not-selected', false]]);
 			}
+		});
+
+		test('parses provideCustomAgents results from metadata content without parseNew', async () => {
+			const agentUri = URI.parse('file:///workspace/.test/agents/meta.agent.md');
+			const promptsService = new class extends MockPromptsService {
+				parseNewCalls = 0;
+				override async parseNew(_uri: URI, _token: CancellationToken): Promise<never> {
+					this.parseNewCalls++;
+					throw new Error('Unexpected parseNew call');
+				}
+			};
+			const emitter = new Emitter<void>();
+			store.add(emitter);
+			const service = new CustomizationHarnessServiceBase([{
+				id: testSessionType1,
+				label: 'Test Extension',
+				icon: ThemeIcon.fromId('extensions'),
+				getStorageSourceFilter: () => ({ sources: [AICustomizationSources.local] }),
+				itemProvider: {
+					onDidChange: emitter.event,
+					provideCustomAgents: async () => [{
+						uri: agentUri,
+						name: 'fallback-name',
+						description: 'fallback-description',
+						_meta: {
+							content: '---\nname: Metadata Agent\ndescription: From metadata\nuser-invocable: false\n---\nUse metadata content.\n',
+						},
+					}],
+					provideChatSessionCustomizations: async () => [],
+				},
+			}], testSessionType1, promptsService);
+			store.add(service);
+
+			const agents = await service.getCustomAgents(testSessionResource1, CancellationToken.None);
+
+			assert.deepStrictEqual({
+				parseNewCalls: promptsService.parseNewCalls,
+				agents: agents.map(agent => ({
+					uri: agent.uri.toString(),
+					name: agent.name,
+					description: agent.description,
+					content: agent.agentInstructions.content,
+					userInvocable: agent.visibility.userInvocable,
+				})),
+			}, {
+				parseNewCalls: 0,
+				agents: [{
+					uri: agentUri.toString(),
+					name: 'Metadata Agent',
+					description: 'From metadata',
+					content: 'Use metadata content.\n',
+					userInvocable: false,
+				}],
+			});
+		});
+
+		test('parses customization agent items from metadata content without parseNew', async () => {
+			const agentUri = URI.parse('file:///workspace/.test/agents/item.agent.md');
+			const promptsService = new class extends MockPromptsService {
+				parseNewCalls = 0;
+				override async parseNew(_uri: URI, _token: CancellationToken): Promise<never> {
+					this.parseNewCalls++;
+					throw new Error('Unexpected parseNew call');
+				}
+			};
+			const emitter = new Emitter<void>();
+			store.add(emitter);
+			const service = new CustomizationHarnessServiceBase([{
+				id: testSessionType1,
+				label: 'Test Extension',
+				icon: ThemeIcon.fromId('extensions'),
+				getStorageSourceFilter: () => ({ sources: [AICustomizationSources.local] }),
+				itemProvider: {
+					onDidChange: emitter.event,
+					provideChatSessionCustomizations: async () => [{
+						uri: agentUri,
+						type: PromptsType.agent,
+						source: 'local',
+						name: 'fallback-name',
+						description: 'fallback-description',
+						enabled: false,
+						extensionId: undefined,
+						pluginUri: undefined,
+						userInvocable: undefined,
+						_meta: {
+							content: '---\nname: Item Metadata Agent\ndescription: From item metadata\n---\nUse item metadata content.\n',
+						},
+					}],
+				},
+			}], testSessionType1, promptsService);
+			store.add(service);
+
+			const agents = await service.getCustomAgents(testSessionResource1, CancellationToken.None);
+
+			assert.deepStrictEqual({
+				parseNewCalls: promptsService.parseNewCalls,
+				agents: agents.map(agent => ({
+					name: agent.name,
+					description: agent.description,
+					content: agent.agentInstructions.content,
+					enabled: agent.enabled,
+				})),
+			}, {
+				parseNewCalls: 0,
+				agents: [{
+					name: 'Item Metadata Agent',
+					description: 'From item metadata',
+					content: 'Use item metadata content.\n',
+					enabled: false,
+				}],
+			});
+		});
+
+		test('falls back to parseNew when provider agent metadata content is missing', async () => {
+			const agentUri = URI.parse('file:///workspace/.test/agents/fallback.agent.md');
+			const promptsService = new class extends MockPromptsService {
+				parseNewCalls = 0;
+				override async parseNew(uri: URI, _token: CancellationToken) {
+					this.parseNewCalls++;
+					return new PromptFileParser().parse(uri, '---\nname: Parsed Fallback Agent\n---\nUse parsed fallback content.\n');
+				}
+			};
+			const emitter = new Emitter<void>();
+			store.add(emitter);
+			const service = new CustomizationHarnessServiceBase([{
+				id: testSessionType1,
+				label: 'Test Extension',
+				icon: ThemeIcon.fromId('extensions'),
+				getStorageSourceFilter: () => ({ sources: [AICustomizationSources.local] }),
+				itemProvider: {
+					onDidChange: emitter.event,
+					provideChatSessionCustomizations: async () => [{
+						uri: agentUri,
+						type: PromptsType.agent,
+						source: 'local',
+						name: 'fallback-name',
+						extensionId: undefined,
+						pluginUri: undefined,
+						userInvocable: undefined,
+					}],
+				},
+			}], testSessionType1, promptsService);
+			store.add(service);
+
+			const agents = await service.getCustomAgents(testSessionResource1, CancellationToken.None);
+
+			assert.deepStrictEqual({
+				parseNewCalls: promptsService.parseNewCalls,
+				agents: agents.map(agent => ({
+					name: agent.name,
+					content: agent.agentInstructions.content,
+				})),
+			}, {
+				parseNewCalls: 1,
+				agents: [{
+					name: 'Parsed Fallback Agent',
+					content: 'Use parsed fallback content.\n',
+				}],
+			});
 		});
 	});
 

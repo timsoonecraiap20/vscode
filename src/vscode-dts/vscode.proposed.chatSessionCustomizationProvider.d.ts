@@ -132,6 +132,15 @@ declare module 'vscode' {
 		 * Applies to agents, skills, and prompts. When `false`, the item is hidden from the UI and cannot be invoked by users,
 		 */
 		readonly userInvocable?: boolean;
+
+		/**
+		 * Additional provider-specific metadata for this customization.
+		 *
+		 * Providers may include a `content` string with the full prompt file
+		 * content. The workbench can use that content to parse provider-backed
+		 * custom agents without reading the URI again.
+		 */
+		readonly _meta?: Record<string, unknown>;
 	}
 
 	/**

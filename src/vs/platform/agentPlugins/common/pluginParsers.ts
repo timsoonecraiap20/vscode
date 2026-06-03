@@ -943,15 +943,15 @@ export async function readAgentComponents(dirs: readonly URI[], fileService: IFi
 	return result;
 }
 
-export async function parseAgentFile(uri: URI, fileService: IFileService): Promise<{ name: string; description?: string }> {
+export async function parseAgentFile(uri: URI, fileService: IFileService): Promise<{ name: string; description?: string; content?: string }> {
 	// Use regex to strip the trailing `.agent.md` before parsing, so we can fall back to a cleaner name if frontmatter is missing or broken.
 	const nameFromFile = basename(uri).replace(/\.agent\.md$/i, '');
 	try {
-		const content = await fileService.readFile(uri);
-		const frontmatter = parseFrontMatter(content.value.toString());
+		const content = (await fileService.readFile(uri)).value.toString();
+		const frontmatter = parseFrontMatter(content);
 		const name = frontmatter?.getStringValue('name')?.trim() || nameFromFile;
 		const description = frontmatter?.getStringValue('description')?.trim();
-		return { name, ...(description ? { description } : {}) };
+		return { name, ...(description ? { description } : {}), content };
 	} catch {
 		return { name: nameFromFile };
 	}

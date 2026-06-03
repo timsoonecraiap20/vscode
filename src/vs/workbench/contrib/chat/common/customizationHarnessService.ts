@@ -23,6 +23,7 @@ import { ExtensionIdentifier } from '../../../../platform/extensions/common/exte
 import { getCanonicalPluginCommandId } from './plugins/agentPluginService.js';
 import { getChatSessionType, LocalChatSessionUri } from './model/chatUri.js';
 import { fromAgentHostUri } from '../../../../platform/agentHost/common/agentHostUri.js';
+import { ParsedPromptFile, PromptFileParser } from './promptSyntax/promptFileParser.js';
 
 export const ICustomizationHarnessService = createDecorator<ICustomizationHarnessService>('customizationHarnessService');
 
@@ -190,6 +191,11 @@ export interface ICustomizationItem {
 	readonly userInvocable?: boolean;
 	/** Optional inline/context-menu actions specific to this item. */
 	readonly actions?: readonly ICustomizationItemAction[];
+	/**
+	 * Additional provider-specific metadata for this customization.
+	 * Providers may include `content` with the full prompt file contents.
+	 */
+	readonly _meta?: Record<string, unknown>;
 }
 
 export interface ICustomizationAgentRef {
@@ -198,6 +204,11 @@ export interface ICustomizationAgentRef {
 	readonly name: string;
 	/** Optional short description for UI preview (from frontmatter `description`) */
 	readonly description?: string;
+	/**
+	 * Additional provider-specific metadata for this agent.
+	 * Providers may include `content` with the full prompt file contents.
+	 */
+	readonly _meta?: Record<string, unknown>;
 }
 
 export function isPluginCustomizationItem(item: { readonly type: string }): boolean {
@@ -328,8 +339,9 @@ export interface ICustomizationHarnessService {
 
 	/**
 	 * Returns the custom agents for the given session type.
-	 * Provider-backed harnesses select items via their own provider and resolve
-	 * details via the core prompts service.
+	 * Provider-backed harnesses select items via their own provider and can pass
+	 * prompt file content in `_meta.content`; otherwise details are resolved via
+	 * the core prompts service.
 	 *
 	 * @param sessionResource URI of the chat session whose customizations
 	 *   should be considered. Forwarded to the underlying
@@ -719,7 +731,7 @@ export class CustomizationHarnessServiceBase implements ICustomizationHarnessSer
 			if (items) {
 				const result: ICustomAgent[] = [];
 				for (const item of items) {
-					const promptFile = await this.promptsService.parseNew(item.uri, token);
+					const promptFile = await this.parseProviderAgentPromptFile(item, token);
 					const extra = {
 						name: item.name,
 						description: item.description,
@@ -762,7 +774,7 @@ export class CustomizationHarnessServiceBase implements ICustomizationHarnessSer
 		const result: ICustomAgent[] = [];
 		for (const item of items) {
 			if (item.type === PromptsType.agent) {
-				const promptFile = await this.promptsService.parseNew(item.uri, token);
+				const promptFile = await this.parseProviderAgentPromptFile(item, token);
 				const extra = {
 					name: item.name,
 					description: item.description,
@@ -776,6 +788,14 @@ export class CustomizationHarnessServiceBase implements ICustomizationHarnessSer
 			}
 		}
 		return result;
+	}
+
+	private async parseProviderAgentPromptFile(item: { readonly uri: URI; readonly _meta?: Record<string, unknown> }, token: CancellationToken): Promise<ParsedPromptFile> {
+		const content = item._meta?.content;
+		if (typeof content === 'string') {
+			return new PromptFileParser().parse(item.uri, content);
+		}
+		return this.promptsService.parseNew(item.uri, token);
 	}
 
 	public async resolvePromptSlashCommand(name: string, sessionResource: URI, token: CancellationToken): Promise<IResolvedChatPromptSlashCommand | undefined> {

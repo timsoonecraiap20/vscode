@@ -852,6 +852,7 @@ export class ExtHostChatAgents2 extends Disposable implements ExtHostChatAgentsS
 				extensionId: item.extensionId,
 				pluginUri: item.pluginUri,
 				userInvocable: item.userInvocable,
+				_meta: item._meta,
 			} satisfies IChatSessionCustomizationItemDto));
 		} catch (err) {
 			return undefined;

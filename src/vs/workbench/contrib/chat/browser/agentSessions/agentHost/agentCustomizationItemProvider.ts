@@ -126,6 +126,7 @@ export class AgentCustomizationItemProvider extends Disposable implements ICusto
 			extensionId: undefined,
 			pluginUri: undefined,
 			userInvocable: undefined,
+			_meta: child.type === CustomizationType.Agent ? child._meta : undefined,
 		};
 	}
 
@@ -135,6 +136,7 @@ export class AgentCustomizationItemProvider extends Disposable implements ICusto
 			uri: this.toRemoteUri(agent.uri),
 			name: agent.name,
 			description: agent.description,
+			_meta: agent._meta,
 		}));
 	}
 
