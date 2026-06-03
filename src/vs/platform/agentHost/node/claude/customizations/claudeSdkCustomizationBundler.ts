@@ -121,6 +121,9 @@ export class ClaudeSdkCustomizationBundler extends Disposable {
 					uri: agentUri,
 					name: agent.name,
 					description: agent.description,
+					_meta: {
+						content: agentMarkdown(agent.name, agent.description),
+					},
 				};
 			});
 		const skillChildren: SkillCustomization[] = snapshot.commands.map(cmd => {
